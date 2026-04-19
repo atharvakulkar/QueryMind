@@ -1,0 +1,69 @@
+Below is the step-by-step checklist to run QueryMind locally.
+
+1) Prerequisites
+Python 3.10+
+A PostgreSQL database you can connect to (Neon/Supabase/local)
+A Groq API key (needed for the NL→SQL agent endpoint)
+2) Create a DB user (read-only recommended)
+In your Postgres, create a user that can only read (example):
+
+CREATE USER querymind_ro WITH PASSWORD 'strong_password';
+GRANT CONNECT ON DATABASE your_db TO querymind_ro;
+GRANT USAGE ON SCHEMA public TO querymind_ro;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO querymind_ro;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO querymind_ro;
+Use that user in your DATABASE_URL.
+
+3) Setup the project (Windows PowerShell)
+From the project root:
+
+cd D:\Atharva_Projects\QueryMind
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+copy .env.example .env
+4) Fill in .env (this is what you “need to give”)
+Edit .env and set at least:
+
+DATABASE_URL (required)
+
+Format: postgresql://USER:PASSWORD@HOST:PORT/DBNAME
+Neon/Supabase will give you host/port/db/user/password.
+GROQ_API_KEY (required for /api/v1/agent/query)
+
+Optional but useful:
+
+MAX_QUERY_ROWS=500
+STATEMENT_TIMEOUT_SECONDS=30
+AGENT_MAX_RETRIES=3
+GROQ_MODEL=llama-3.3-70b-versatile
+LOG_AGENT_SQL=true
+Keep ALLOW_ADHOC_SQL=false (safer)
+5) Run the FastAPI backend
+uvicorn backend.main:create_app --factory --host 127.0.0.1 --port 8000
+Check:
+
+http://127.0.0.1:8000/health
+http://127.0.0.1:8000/ready
+http://127.0.0.1:8000/docs
+6) Run the Streamlit UI (recommended)
+Open a new PowerShell (same venv activated), then:
+
+cd D:\Atharva_Projects\QueryMind
+.\.venv\Scripts\Activate.ps1
+streamlit run frontend/app.py
+In the sidebar, keep API base URL as http://127.0.0.1:8000.
+
+7) (Optional) Run the MCP server standalone
+You do not need to run this manually for the agent (the API spawns it), but for testing MCP tools with an MCP client:
+
+python -m mcp_server.server
+8) Quick test query
+In Streamlit, ask something like:
+
+“Show current database and server time”
+Or a real question that matches your tables
+Or via API docs: POST /api/v1/agent/query with:
+
+{"question":"List 5 rows from public.your_table","max_rows":5}
+If you paste (1) your DB provider (Neon/Supabase/local) and (2) a sample table name you have, I’ll give you the exact first question to try that will work with your schema.
