@@ -8,11 +8,17 @@ import logging
 import uuid
 from typing import Any
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_groq import ChatGroq
 
 from backend.agent.sql_validator import SqlPolicyValidator
-from backend.schemas.agent import AgentRunResponse, NLQueryRequest, SQLDraft, SchemaLink
+from backend.schemas.agent import (
+    AgentRunResponse,
+    HistoryEntry,
+    NLQueryRequest,
+    SQLDraft,
+    SchemaLink,
+)
 from core.config import Settings
 from core.exceptions import (
     ConfigError,
@@ -96,7 +102,9 @@ class QueryMindAgent:
                 details={"hint": "Check DATABASE_URL and permissions."},
             )
 
-        schema_link = await self._schema_linking(llm, request.question, summary, request_id)
+        schema_link = await self._schema_linking(
+            llm, request.question, summary, request_id, request.history,
+        )
 
         if not schema_link.tables:
             raise SchemaLinkingError(
@@ -152,6 +160,7 @@ class QueryMindAgent:
                     attempt,
                     feedback,
                     last_sql,
+                    request.history,
                 )
                 sql = draft.sql.strip()
                 if self._settings.log_agent_sql:
@@ -167,6 +176,11 @@ class QueryMindAgent:
                 if attempt > 1:
                     warnings.append(f"Succeeded after {attempt} attempt(s).")
 
+                # Generate an executive insight summary after successful execution
+                insights = await self._generate_insights(
+                    llm, request.question, validated, cols, rows, request_id,
+                )
+
                 return AgentRunResponse(
                     final_sql=validated,
                     columns=cols,
@@ -176,6 +190,7 @@ class QueryMindAgent:
                     schema_link=schema_link,
                     warnings=warnings,
                     assumptions=draft.assumptions,
+                    insights=insights,
                 )
             except (SQLExecutionError, ValueError) as exc:
                 feedback = getattr(exc, "message", str(exc))
@@ -209,6 +224,7 @@ class QueryMindAgent:
         question: str,
         summary: dict[str, Any],
         request_id: str,
+        history: list[HistoryEntry] | None = None,
     ) -> SchemaLink:
         system = SystemMessage(
             content=(
@@ -225,7 +241,16 @@ class QueryMindAgent:
                 f"Question:\n{question}"
             ),
         )
-        out = await asyncio.to_thread(llm.invoke, [system, human])
+        # Build message list with conversational history
+        messages: list = [system]
+        if history:
+            for entry in history[-4:]:
+                if entry.role == "user":
+                    messages.append(HumanMessage(content=entry.content))
+                else:
+                    messages.append(AIMessage(content=entry.content))
+        messages.append(human)
+        out = await asyncio.to_thread(llm.invoke, messages)
         text = out.content if isinstance(out.content, str) else str(out.content)
         try:
             data = _extract_json_object(text)
@@ -247,12 +272,16 @@ class QueryMindAgent:
         attempt: int,
         feedback: str | None,
         last_sql: str | None,
+        history: list[HistoryEntry] | None = None,
     ) -> SQLDraft:
         system = SystemMessage(
             content=(
                 "You are a PostgreSQL expert. Output ONLY a JSON object with keys: "
                 "sql (string, a single SELECT or WITH ... SELECT only), "
-                "assumptions (array of short strings). "
+                "assumptions (array of short strings), "
+                "insights (string, a one or two sentence executive summary predicting what "
+                "the data will show based on the question — e.g. 'This should reveal the "
+                "top regions by revenue for Q3.'). "
                 "Use schema-qualified table names. Qualify columns with table aliases when needed. "
                 "No semicolons after the query. No markdown."
             ),
@@ -268,7 +297,18 @@ class QueryMindAgent:
         if last_sql:
             parts.append(f"Previous SQL:\n{last_sql}")
         human = HumanMessage(content="\n\n".join(parts))
-        out = await asyncio.to_thread(llm.invoke, [system, human])
+
+        # Build messages with conversational context
+        messages: list = [system]
+        if history:
+            for entry in history[-4:]:
+                if entry.role == "user":
+                    messages.append(HumanMessage(content=entry.content))
+                else:
+                    messages.append(AIMessage(content=entry.content))
+        messages.append(human)
+
+        out = await asyncio.to_thread(llm.invoke, messages)
         text = out.content if isinstance(out.content, str) else str(out.content)
         try:
             data = _extract_json_object(text)
@@ -280,3 +320,46 @@ class QueryMindAgent:
                 code="sql_generation_parse_error",
                 details={"raw": text[:2000], "reason": str(exc)},
             ) from exc
+
+    async def _generate_insights(
+        self,
+        llm: ChatGroq,
+        question: str,
+        sql: str,
+        columns: list[str],
+        rows: list[dict[str, Any]],
+        request_id: str,
+    ) -> str | None:
+        """Best-effort executive summary of query results."""
+        if not rows:
+            return None
+        try:
+            # Limit to first 20 rows to keep prompt short
+            sample = rows[:20]
+            system = SystemMessage(
+                content=(
+                    "You are a data analyst. Given a business question, the SQL that answered it, "
+                    "and a sample of the results, write a concise 1-2 sentence executive summary "
+                    "of the key insight. Be specific with numbers when available. "
+                    "Output ONLY the insight text, no JSON, no markdown."
+                ),
+            )
+            human = HumanMessage(
+                content=(
+                    f"Question: {question}\n\n"
+                    f"SQL: {sql}\n\n"
+                    f"Columns: {columns}\n\n"
+                    f"Sample rows ({len(sample)} of {len(rows)} total):\n"
+                    f"{json.dumps(sample, indent=2, default=str)[:6000]}"
+                ),
+            )
+            out = await asyncio.to_thread(llm.invoke, [system, human])
+            text = out.content if isinstance(out.content, str) else str(out.content)
+            insight = text.strip()
+            if insight:
+                logger.info("[%s] Insights generated.", request_id)
+                return insight
+            return None
+        except Exception:
+            logger.warning("[%s] Insights generation failed (non-fatal).", request_id, exc_info=True)
+            return None

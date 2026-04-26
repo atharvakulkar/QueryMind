@@ -17,6 +17,7 @@ export interface AgentRunResponse {
   schema_link: SchemaLink;
   warnings: string[];
   assumptions: string[];
+  insights: string | null;
 }
 
 /** Error envelope from the backend. */
@@ -43,10 +44,16 @@ export interface ReadyResponse {
 }
 
 /* ===== NL Query Request ===== */
+export interface HistoryEntry {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 export interface NLQueryRequest {
   question: string;
   max_rows?: number;
   dialect?: string;
+  history?: HistoryEntry[];
 }
 
 /* ===== Frontend Message Types ===== */
@@ -77,6 +84,9 @@ export interface Message {
   isLoading?: boolean;
   isError?: boolean;
   errorMessage?: string;
+
+  /* LLM-generated insight (Phase 5) */
+  insights?: string | null;
 }
 
 /** Sidebar history entry. */

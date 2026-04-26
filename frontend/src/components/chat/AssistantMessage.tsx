@@ -1,5 +1,5 @@
 import { type FC } from 'react';
-import { BrainCircuit, AlertTriangle, Clock, RotateCcw } from 'lucide-react';
+import { BrainCircuit, AlertTriangle, Clock, Lightbulb, RotateCcw } from 'lucide-react';
 import type { Message } from '@/types';
 import { formatDuration, formatTime } from '@/lib/utils';
 import { ThoughtProcessAccordion } from '@/components/chat/ThoughtProcessAccordion';
@@ -98,6 +98,16 @@ export const AssistantMessage: FC<AssistantMessageProps> = ({ message }) => {
                 {w}
               </span>
             ))}
+          </div>
+        )}
+
+        {/* Insights */}
+        {message.insights && (
+          <div className="flex items-start gap-2.5 p-3 rounded-lg bg-gradient-to-r from-[var(--color-brand-500)]/10 to-[var(--color-accent-500)]/10 border border-[var(--color-brand-500)]/20">
+            <Lightbulb className="w-4 h-4 mt-0.5 shrink-0 text-[var(--color-brand-400)]" />
+            <p className="text-sm text-[var(--color-text-primary)] leading-relaxed">
+              {message.insights}
+            </p>
           </div>
         )}
 

@@ -138,11 +138,20 @@ class SqlPolicyValidator:
                     for t in catalog.allowed_columns
                     if t.endswith("." + cname_l)
                 ]
-                if len(matches) != 1:
+                if len(matches) == 0:
                     raise SQLExecutionError(
-                        f"Ambiguous or unknown unqualified column {cname_l!r}.",
+                        f"Unknown column {cname_l!r} — it does not exist in any allowed table. "
+                        f"Double-check the column name against the schema catalog.",
                         code="sql_validation_error",
-                        details={"matches": matches[:10]},
+                        details={"column": cname_l},
+                    )
+                if len(matches) > 1:
+                    raise SQLExecutionError(
+                        f"Ambiguous unqualified column {cname_l!r} — it exists in multiple tables: "
+                        f"{', '.join(matches[:5])}. Please qualify it with a table alias "
+                        f"(e.g. alias.{cname_l}) to resolve the ambiguity.",
+                        code="sql_validation_error",
+                        details={"column": cname_l, "matches": matches[:10]},
                     )
 
     def _resolve_table_fq(self, table: exp.Table, catalog: SchemaCatalog) -> str:

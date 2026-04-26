@@ -1,0 +1,47 @@
+# docker-compose.yml — QueryMind local development stack
+# Usage:  docker-compose up --build
+# Visit:  http://localhost:8000
+
+services:
+  # ---- PostgreSQL ----
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: querymind
+      POSTGRES_PASSWORD: querymind_dev
+      POSTGRES_DB: querymind_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U querymind -d querymind_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ---- QueryMind App (API + Frontend) ----
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://querymind:querymind_dev@postgres:5432/querymind_db
+      GROQ_API_KEY: ${GROQ_API_KEY:-your_groq_api_key}
+      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      AGENT_MAX_RETRIES: "3"
+      MAX_QUERY_ROWS: "500"
+      STATEMENT_TIMEOUT_SECONDS: "30"
+      ALLOW_ADHOC_SQL: "false"
+      LOG_AGENT_SQL: "true"
+      LOG_LEVEL: "INFO"
+
+volumes:
+  pgdata:

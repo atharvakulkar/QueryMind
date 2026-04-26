@@ -1,4 +1,4 @@
-import { type FC, useMemo } from 'react';
+import { type FC, useCallback, useMemo, useRef } from 'react';
 import {
   ResponsiveContainer,
   BarChart,
@@ -13,7 +13,7 @@ import {
   Tooltip,
   Legend,
 } from 'recharts';
-import { BarChart3 } from 'lucide-react';
+import { BarChart3, Download } from 'lucide-react';
 import type { ChartType } from '@/types';
 
 interface DataChartProps {
@@ -60,6 +60,42 @@ export const DataChart: FC<DataChartProps> = ({ columns, rows, chartType }) => {
   }, [columns, rows]);
 
   if (numericCols.length === 0) return null;
+
+  const chartRef = useRef<HTMLDivElement>(null);
+
+  /** Export chart area to PNG via SVG serialisation + canvas rasterisation. */
+  const exportPNG = useCallback(() => {
+    const container = chartRef.current;
+    if (!container) return;
+    const svg = container.querySelector('svg');
+    if (!svg) return;
+
+    const serializer = new XMLSerializer();
+    const svgStr = serializer.serializeToString(svg);
+    const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(svgBlob);
+
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const scale = 2; // retina-quality
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.fillStyle = '#0f1117'; // match dark bg
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.scale(scale, scale);
+      ctx.drawImage(img, 0, 0);
+      const pngUrl = canvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = pngUrl;
+      a.download = `querymind_chart_${chartType}.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+  }, [chartType]);
 
   const commonProps = {
     data: chartData,
@@ -173,13 +209,24 @@ export const DataChart: FC<DataChartProps> = ({ columns, rows, chartType }) => {
 
   return (
     <div className="rounded-xl border border-[var(--color-border-subtle)] overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-2.5 bg-[var(--color-bg-tertiary)] border-b border-[var(--color-border-subtle)]">
-        <BarChart3 className="w-3.5 h-3.5 text-[var(--color-brand-400)]" />
-        <span className="text-xs font-medium text-[var(--color-text-secondary)] capitalize">
-          {chartType} Chart
-        </span>
+      <div className="flex items-center justify-between px-4 py-2.5 bg-[var(--color-bg-tertiary)] border-b border-[var(--color-border-subtle)]">
+        <div className="flex items-center gap-2">
+          <BarChart3 className="w-3.5 h-3.5 text-[var(--color-brand-400)]" />
+          <span className="text-xs font-medium text-[var(--color-text-secondary)] capitalize">
+            {chartType} Chart
+          </span>
+        </div>
+        <button
+          onClick={exportPNG}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-medium
+            text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]
+            transition-colors duration-150"
+        >
+          <Download className="w-3 h-3" />
+          PNG
+        </button>
       </div>
-      <div className="p-4 bg-[var(--color-bg-secondary)]">
+      <div ref={chartRef} className="p-4 bg-[var(--color-bg-secondary)]">
         <ResponsiveContainer width="100%" height={320}>
           {renderChart()}
         </ResponsiveContainer>

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type {
   ChatSession,
   ConnectionStatus,
+  HistoryEntry,
   Message,
 } from '@/types';
 import {
@@ -158,7 +159,30 @@ export const useChatStore = create<ChatState>((set, get) => {
       }));
 
       try {
-        const response = await sendAgentQuery({ question });
+        // Build conversational history from the last 4 turns (user + assistant pairs)
+        const currentMessages = get().messages;
+        const historyEntries: HistoryEntry[] = currentMessages
+          .filter(
+            (m) =>
+              !m.isLoading &&
+              !m.isError &&
+              m.content &&
+              m.id !== userMsg.id &&
+              m.id !== assistantPlaceholder.id,
+          )
+          .slice(-8) // last 4 pairs (up to 8 messages)
+          .map((m) => ({
+            role: m.role as 'user' | 'assistant',
+            content:
+              m.role === 'assistant'
+                ? (m.insights ?? m.content).slice(0, 2000)
+                : m.content.slice(0, 2000),
+          }));
+
+        const response = await sendAgentQuery({
+          question,
+          history: historyEntries.length > 0 ? historyEntries : undefined,
+        });
 
         const chartType = detectChartType(response.columns, response.rows);
 
@@ -175,6 +199,7 @@ export const useChatStore = create<ChatState>((set, get) => {
           warnings: response.warnings,
           assumptions: response.assumptions,
           chart_type: chartType,
+          insights: response.insights,
         };
 
         set((s) => {

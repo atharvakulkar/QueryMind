@@ -2,13 +2,14 @@
 
 Enterprise-oriented **Text-to-SQL BI agent** (resume / academic project). It connects natural language to **read-only** PostgreSQL queries using **MCP** for schema discovery, **LangChain + Groq** for generation, and **sqlglot** for policy validation before execution.
 
-## What is implemented (Phases 0–4)
+## What is implemented (Phases 0–5)
 
 | Phase | What you get |
 |-------|----------------|
 | **0–2** | FastAPI app, asyncpg pool, health/readiness, demo dataset route, optional gated ad-hoc SQL, MCP stdio server (`list_tables`, `describe_table`, `export_schema_summary`) |
 | **3** | NL→SQL **agent**: schema linking → SQL draft → **SqlPolicyValidator** (allowlisted identifiers, `LIMIT`, read-only) → execute → retry on failure (see `AGENT_MAX_RETRIES`) |
-| **4** | **Streamlit** UI that only talks to the API (`POST /api/v1/agent/query`) — no database credentials in the browser |
+| **4** | **Streamlit** UI + modern **React / Vite** dashboard — both talk to the API (`POST /api/v1/agent/query`) — no database credentials in the browser |
+| **5** | **Conversational memory** (multi-turn Q&A), LLM-generated **executive insights**, **chart PNG export**, improved SQL guardrails, **Docker** + **GitHub Actions CI** |
 
 ## Repository layout
 
@@ -27,7 +28,12 @@ tests/          pytest (HTTP, SQL guard, introspection, agent mocks)
 - **PostgreSQL** — `asyncpg` pool, `GET /ready`, statement timeout from settings
 - **MCP** — separate process for schema tools; API spawns an MCP stdio session when the agent runs
 - **Agent** — Groq (`GROQ_MODEL`), enforced JSON schema-link step, **sqlglot** AST checks against `SchemaCatalog`, configurable retries
-- **Streamlit** — question input, generated SQL + schema link, results table, CSV download, error messages from API
+- **Conversational Memory** — rolling window of prior Q&A turns passed to the LLM for multi-turn analysis
+- **Executive Insights** — LLM generates a 1–2 sentence summary of each query result
+- **React / Vite UI** — chat interface, data tables with CSV export, interactive charts with PNG export, session persistence via `localStorage`
+- **Streamlit** — legacy question input, generated SQL + schema link, results table, CSV download, error messages from API
+- **Docker** — multi-stage `Dockerfile` + `docker-compose.yml` for one-command local deployment
+- **CI/CD** — GitHub Actions runs `pytest` and `eslint` on every PR
 - **Tests** — `pytest` for routes, guards, introspector stub, agent (mocked LLM / MCP / DB)
 
 ## Requirements
@@ -136,7 +142,20 @@ python -m pytest tests -q
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — components, agent flow, trust boundaries
 
+## Docker (one-command local stack)
+
+Requires Docker and Docker Compose.
+
+```powershell
+# Set your Groq key on the host, then:
+$env:GROQ_API_KEY="your_key"
+docker-compose up --build
+```
+
+Visit http://localhost:8000 — the FastAPI server serves both the API and the compiled React UI.
+
 ## Roadmap
 
-- Tighter sqlglot handling for ambiguous unqualified columns
-- Optional GitHub Actions workflow for `pytest`
+- Server-side conversation persistence (PostgreSQL-backed threads)
+- Role-based access and user authentication
+- Optional GitHub Actions workflow for Docker build + push

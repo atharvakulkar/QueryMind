@@ -1,10 +1,23 @@
-"""Pydantic models for the NL→SQL agent (Phase 3)."""
+"""Pydantic models for the NL→SQL agent (Phases 3–5)."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
+
+
+class HistoryEntry(BaseModel):
+    """A single turn in the conversation history sent by the frontend."""
+
+    role: Literal["user", "assistant"] = Field(
+        description="Who produced this message.",
+    )
+    content: str = Field(
+        min_length=1,
+        max_length=20_000,
+        description="The text of the message (question or summary).",
+    )
 
 
 class NLQueryRequest(BaseModel):
@@ -18,6 +31,11 @@ class NLQueryRequest(BaseModel):
         description="Override default row cap for this request (clamped to server max).",
     )
     dialect: str = Field(default="postgres", description="SQL dialect hint for the LLM.")
+    history: list[HistoryEntry] = Field(
+        default_factory=list,
+        max_length=20,
+        description="Rolling window of previous conversation turns for multi-turn context.",
+    )
 
 
 class SchemaLink(BaseModel):
@@ -38,10 +56,14 @@ class SchemaLink(BaseModel):
 
 
 class SQLDraft(BaseModel):
-    """LLM-generated SQL plus explicit assumptions."""
+    """LLM-generated SQL plus explicit assumptions and optional insight."""
 
     sql: str = Field(min_length=1)
     assumptions: list[str] = Field(default_factory=list)
+    insights: str | None = Field(
+        default=None,
+        description="One or two sentence executive summary of what the data likely shows.",
+    )
 
 
 class AgentRunResponse(BaseModel):
@@ -55,3 +77,7 @@ class AgentRunResponse(BaseModel):
     schema_link: SchemaLink
     warnings: list[str] = Field(default_factory=list)
     assumptions: list[str] = Field(default_factory=list)
+    insights: str | None = Field(
+        default=None,
+        description="LLM-generated executive summary of the query results.",
+    )

@@ -5,10 +5,12 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from backend.routers import agent, health, query
 from backend.schemas.api import ErrorBody, ErrorResponse
@@ -75,7 +77,13 @@ def create_app(
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost", "http://127.0.0.1", "http://localhost:8501"],
+        allow_origins=[
+            "http://localhost",
+            "http://127.0.0.1",
+            "http://localhost:5173",   # Vite dev server
+            "http://127.0.0.1:5173",
+            "http://localhost:8501",   # Streamlit (Phase 4 legacy)
+        ],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -126,5 +134,24 @@ def create_app(
     app.include_router(health.router)
     app.include_router(query.router, prefix="/api/v1")
     app.include_router(agent.router, prefix="/api/v1")
+
+    # --- Serve compiled Vite frontend when available (Docker / production) ---
+    _dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+    if _dist.is_dir():
+        _index = _dist / "index.html"
+
+        # Serve static assets (JS, CSS, images)
+        app.mount("/assets", StaticFiles(directory=str(_dist / "assets")), name="static-assets")
+
+        # SPA catch-all: any non-API path serves index.html
+        @app.get("/{full_path:path}", include_in_schema=False)
+        async def _spa_fallback(full_path: str) -> FileResponse:
+            # Serve the file directly if it exists in dist (e.g. favicon.ico)
+            candidate = _dist / full_path
+            if candidate.is_file():
+                return FileResponse(str(candidate))
+            return FileResponse(str(_index))
+
+        logger.info("Serving compiled frontend from %s", _dist)
 
     return app
