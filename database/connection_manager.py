@@ -147,3 +147,57 @@ class ConnectionManager:
         columns = list(trimmed[0].keys())
         dict_rows = [dict(r) for r in trimmed]
         return columns, dict_rows, elapsed
+
+    # ------------------------------------------------------------------
+    # Write helpers — used exclusively by the dataset upload service.
+    # These intentionally bypass the read-only guard.
+    # ------------------------------------------------------------------
+
+    async def execute_ddl(self, sql: str) -> None:
+        """Execute a DDL statement (CREATE TABLE, CREATE SCHEMA, DROP TABLE).
+
+        Only call this from trusted internal services (e.g., csv_uploader).
+        """
+        try:
+            async with self.pool.acquire() as conn:
+                await conn.execute(sql)
+        except Exception as exc:
+            logger.exception("DDL execution failed.")
+            raise SQLExecutionError(
+                "DDL execution failed.",
+                code="ddl_execution_error",
+                details={"reason": str(exc)},
+            ) from exc
+
+    async def copy_records(
+        self,
+        table_name: str,
+        schema_name: str,
+        columns: list[str],
+        records: list[tuple],
+    ) -> int:
+        """Bulk-insert records using asyncpg COPY protocol.
+
+        Returns the number of rows inserted. Much faster than individual INSERTs.
+        """
+        try:
+            async with self.pool.acquire() as conn:
+                result = await conn.copy_records_to_table(
+                    table_name,
+                    schema_name=schema_name,
+                    columns=columns,
+                    records=records,
+                )
+                # result is a string like "COPY <count>"
+                count = int(result.split()[-1]) if result else len(records)
+                logger.info(
+                    "COPY %s rows into %s.%s", count, schema_name, table_name,
+                )
+                return count
+        except Exception as exc:
+            logger.exception("COPY records failed.")
+            raise SQLExecutionError(
+                "Bulk insert failed.",
+                code="copy_records_error",
+                details={"reason": str(exc)},
+            ) from exc

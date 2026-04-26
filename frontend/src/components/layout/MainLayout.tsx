@@ -1,4 +1,4 @@
-import { useEffect, useState, type FC } from 'react';
+import { useEffect, useState, useCallback, type FC } from 'react';
 import {
   Database,
   MessageSquarePlus,
@@ -10,12 +10,14 @@ import {
   Loader2,
   Zap,
   Clock,
+  UploadCloud,
 } from 'lucide-react';
 import { useChatStore } from '@/store/chatStore';
 import { cn, truncate } from '@/lib/utils';
 import { MessageList } from '@/components/chat/MessageList';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { ToastContainer } from '@/components/ui/ToastContainer';
+import { listUploads } from '@/services/uploadApi';
 
 export const MainLayout: FC = () => {
   const {
@@ -33,13 +35,25 @@ export const MainLayout: FC = () => {
   } = useChatStore();
 
   const [mounted, setMounted] = useState(false);
+  const [uploadCount, setUploadCount] = useState(0);
+
+  const fetchUploads = useCallback(async () => {
+    try {
+      const data = await listUploads();
+      setUploadCount(data.length);
+    } catch {} // eslint-disable-line no-empty
+  }, []);
 
   useEffect(() => {
     setMounted(true);
     checkConnection();
-    const interval = setInterval(checkConnection, 30_000);
+    fetchUploads();
+    const interval = setInterval(() => {
+      checkConnection();
+      fetchUploads();
+    }, 30_000);
     return () => clearInterval(interval);
-  }, [checkConnection]);
+  }, [checkConnection, fetchUploads]);
 
   if (!mounted) return null;
 
@@ -76,8 +90,8 @@ export const MainLayout: FC = () => {
           </button>
         </div>
 
-        {/* New Chat Button */}
-        <div className="p-3">
+        {/* Action Buttons */}
+        <div className="p-3 space-y-2">
           <button
             onClick={newSession}
             id="new-chat-button"
@@ -88,6 +102,24 @@ export const MainLayout: FC = () => {
           >
             <MessageSquarePlus className="w-4 h-4" />
             New Chat
+          </button>
+          
+          <button
+            onClick={newSession}
+            className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium
+              bg-[var(--color-bg-secondary)] border border-[var(--color-border-subtle)]
+              text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-border-brand)]
+              transition-all duration-200 group"
+          >
+            <div className="flex items-center gap-2">
+              <UploadCloud className="w-4 h-4 text-[var(--color-text-tertiary)] group-hover:text-[var(--color-brand-400)] transition-colors" />
+              Upload Dataset
+            </div>
+            {uploadCount > 0 && (
+              <span className="flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-[var(--color-brand-500)]/10 text-[var(--color-brand-400)] text-[10px] font-bold">
+                {uploadCount}
+              </span>
+            )}
           </button>
         </div>
 

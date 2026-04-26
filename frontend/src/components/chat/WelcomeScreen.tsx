@@ -1,6 +1,7 @@
 import { type FC } from 'react';
 import { useChatStore } from '@/store/chatStore';
-import { Database, Sparkles, BarChart3, Table2, BrainCircuit } from 'lucide-react';
+import { Database, Sparkles, Table2, BrainCircuit, Upload } from 'lucide-react';
+import { DatasetUpload } from '@/components/upload/DatasetUpload';
 
 const SUGGESTIONS = [
   'Show me the top 10 customers by revenue',
@@ -42,7 +43,7 @@ export const WelcomeScreen: FC = () => {
             { icon: Database, label: 'Schema Aware' },
             { icon: Sparkles, label: 'AI-Powered' },
             { icon: Table2, label: 'Instant Tables' },
-            { icon: BarChart3, label: 'Smart Charts' },
+            { icon: Upload, label: 'Upload CSV' },
           ].map(({ icon: Icon, label }) => (
             <div
               key={label}
@@ -69,6 +70,11 @@ export const WelcomeScreen: FC = () => {
               </p>
             </button>
           ))}
+        </div>
+
+        {/* Upload Zone */}
+        <div className="pt-6 border-t border-[var(--color-border-subtle)]/50 mt-8">
+          <DatasetUpload />
         </div>
       </div>
     </div>

@@ -46,6 +46,19 @@ class Settings(BaseSettings):
         alias="MCP_SERVER_CWD",
         description="Working directory for MCP stdio subprocess (default: cwd).",
     )
+    # Dataset upload (Phase 5)
+    allow_data_upload: bool = Field(
+        default=False,
+        alias="ALLOW_DATA_UPLOAD",
+        description="Enable CSV dataset upload endpoint (creates tables in 'uploads' schema).",
+    )
+    max_upload_size_mb: int = Field(
+        default=10,
+        ge=1,
+        le=100,
+        alias="MAX_UPLOAD_SIZE_MB",
+        description="Maximum CSV file size in megabytes.",
+    )
 
     @field_validator("log_level")
     @classmethod

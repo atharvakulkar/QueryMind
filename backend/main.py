@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend.routers import agent, health, query
+from backend.routers import agent, health, query, upload
 from backend.schemas.api import ErrorBody, ErrorResponse
 from core.config import Settings, get_settings
 from core.exceptions import (
@@ -23,6 +23,7 @@ from core.exceptions import (
     SQLExecutionError,
     SQLGenerationError,
     SchemaLinkingError,
+    DataUploadError,
 )
 from core.logging_config import configure_logging
 from database.connection_manager import ConnectionManager
@@ -106,6 +107,8 @@ def create_app(
             code = status.HTTP_500_INTERNAL_SERVER_ERROR
         elif isinstance(exc, SQLExecutionError):
             code = status.HTTP_400_BAD_REQUEST
+        elif isinstance(exc, DataUploadError):
+            code = status.HTTP_400_BAD_REQUEST
         else:
             code = status.HTTP_400_BAD_REQUEST
         payload = ErrorResponse(
@@ -134,6 +137,7 @@ def create_app(
     app.include_router(health.router)
     app.include_router(query.router, prefix="/api/v1")
     app.include_router(agent.router, prefix="/api/v1")
+    app.include_router(upload.router, prefix="/api/v1")
 
     # --- Serve compiled Vite frontend when available (Docker / production) ---
     _dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"

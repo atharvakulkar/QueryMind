@@ -89,8 +89,29 @@ export interface Message {
   insights?: string | null;
 }
 
+/* ===== Upload Types (Phase 5) ===== */
+export interface UploadedTableInfo {
+  table_name: string;
+  column_count: number;
+}
+
+export interface ColumnDetail {
+  name: string;
+  pg_type: string;
+}
+
+export interface UploadResponse {
+  schema_name: string;
+  table_name: string;
+  fully_qualified: string;
+  row_count: number;
+  columns: ColumnDetail[];
+  message: string;
+}
+
 /** Sidebar history entry. */
 export interface ChatSession {
+
   id: string;
   title: string;
   createdAt: Date;

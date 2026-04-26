@@ -88,3 +88,16 @@ class MCPConnectionError(QueryMindError):
         details: dict | None = None,
     ) -> None:
         super().__init__(message, code="mcp_connection_error", details=details)
+
+
+class DataUploadError(QueryMindError):
+    """CSV upload or table creation failed."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "data_upload_error",
+        details: dict | None = None,
+    ) -> None:
+        super().__init__(message, code=code, details=details)
